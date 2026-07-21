@@ -986,6 +986,9 @@ void luaV_finishOp (lua_State *L) {
 #define ttisfloatK(o) (load_tag(o) == LUA_VNUMFLT)
 #define ttisintegerK(o) (load_tag(o) == LUA_VNUMINT)
 #define ivalueK(o) load_int(o)
+// Promote a known constant `TString` when tracing.
+#define tsvalueK(o) \
+  (yk_is_interpreting() ? tsvalue(o) : gco2ts(load_gcobj(o)))
 // FIXME: We currently have to use memcpy to bitcast from uint64_t to lua_Number
 #define fltvalueK(o) ({ uint64_t x = load_flt(o); lua_Number y; memcpy(&y, &x, sizeof(lua_Number)); y; })
 #define tointegernsK(o,i) \
@@ -1034,10 +1037,19 @@ lua_Integer load_int(const TValue *o) {
   NOOPT_VAL(o);
   return o->value_.i;
 }
+
+// Returns the collectable object stored in `o`. The caller is responsible for
+// checking that this `TValue` really contains a collectable object.
+__attribute__((yk_idempotent))
+GCObject *load_gcobj(const TValue *o) {
+  NOOPT_VAL(o);
+  return o->value_.gc;
+}
 #else
 #define ttisfloatK(o) ttisfloat(o)
 #define ttisintegerK(o) ttisinteger(o)
 #define ivalueK(o) ivalue(o)
+#define tsvalueK(o) tsvalue(o)
 #  define op_arithK_aux(L,v1,v2,iop,fop) (op_arith_aux(L,v1,v2,iop,fop))
 #  define op_arithfK_aux(L,v1,v2,fop) (op_arithf_aux(L,v1,v2,fop))
 #  define tointegernsK(o,i) tointegerns(o,i)
@@ -1408,7 +1420,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         StkId ra = RA(i);
         TValue *upval = cl->upvals[GETARG_B(i)]->v.p;
         TValue *rc = KC(i);
-        TString *key = tsvalue(rc);  /* key must be a short string */
+        TString *key = tsvalueK(rc);  /* key must be a short string */
         lu_byte tag;
         luaV_fastget(upval, key, s2v(ra), luaH_getshortstr, tag);
         if (tagisempty(tag))
@@ -1446,7 +1458,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         StkId ra = RA(i);
         TValue *rb = vRB(i);
         TValue *rc = KC(i);
-        TString *key = tsvalue(rc);  /* key must be a short string */
+        TString *key = tsvalueK(rc);  /* key must be a short string */
         lu_byte tag;
         luaV_fastget(rb, key, s2v(ra), luaH_getshortstr, tag);
         if (tagisempty(tag))
@@ -1458,7 +1470,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         TValue *upval = cl->upvals[GETARG_A(i)]->v.p;
         TValue *rb = KB(i);
         TValue *rc = RKC(i);
-        TString *key = tsvalue(rb);  /* key must be a short string */
+        TString *key = tsvalueK(rb);  /* key must be a short string */
         luaV_fastset(upval, key, rc, hres, luaH_psetshortstr);
         if (hres == HOK)
           luaV_finishfastset(L, upval, rc);
@@ -1503,7 +1515,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         int hres;
         TValue *rb = KB(i);
         TValue *rc = RKC(i);
-        TString *key = tsvalue(rb);  /* key must be a short string */
+        TString *key = tsvalueK(rb);  /* key must be a short string */
         luaV_fastset(s2v(ra), key, rc, hres, luaH_psetshortstr);
         if (hres == HOK)
           luaV_finishfastset(L, s2v(ra), rc);
@@ -1537,7 +1549,7 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
         lu_byte tag;
         TValue *rb = vRB(i);
         TValue *rc = KC(i);
-        TString *key = tsvalue(rc);  /* key must be a short string */
+        TString *key = tsvalueK(rc);  /* key must be a short string */
         setobj2s(L, ra + 1, rb);
         luaV_fastget(rb, key, s2v(ra), luaH_getshortstr, tag);
         if (tagisempty(tag))
