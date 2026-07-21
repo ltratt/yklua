@@ -713,7 +713,16 @@ int luaD_pretailcall (lua_State *L, CallInfo *ci, StkId func,
 #if YKLUA_DEBUG_STRS
           yk_location_set_debug_str(&p->yklocs[0], p->instdebugstrs[0]);
 #endif
+        } else if (!p->called) {
+          p->called = true;
         }
+        // Because this is a tail call the "current" function -- `caller_p` --
+        // has implicitly returned. If the "current" function is the same as
+        // the "about to call" function, we don't do anything; in all other
+        // cases we mark the "current" function as uncalled.
+        Proto *caller_p = ci_func(ci)->p;
+        if (caller_p != p)
+          caller_p->called = false;
       }
 #endif
       ci->u.l.savedpc = p->code;  /* starting point */
